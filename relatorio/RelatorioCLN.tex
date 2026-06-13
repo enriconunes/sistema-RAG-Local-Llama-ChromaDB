@@ -66,9 +66,7 @@ Computação em Linguagem Natural da Universidade da Beira Interior.
 O objetivo deste trabalho foi construir um sistema de perguntas e respostas
 completamente \textbf{local} sobre uma fonte de conhecimento arbitrária da Web.
 Em vez de enviar dados para serviços externos, toda a indexação, pesquisa
-semântica e geração de resposta decorre na própria máquina. Esta opção responde
-à restrição central do enunciado: \emph{``que quaisquer recursos usados sejam
-configurados localmente e que não haja chamadas a APIs durante a sua operação''}.
+semântica e geração de resposta decorre na própria máquina.
 A única etapa que necessita de ligação à Internet é a recolha inicial de
 conteúdo (\emph{web scraping}); a partir desse momento, o sistema responde
 \textbf{sem qualquer dependência de rede}.
@@ -77,7 +75,7 @@ Um sistema RAG combina duas fases: (1) a \emph{recuperação} dos excertos mais
 relevantes para uma pergunta e (2) a \emph{geração} de uma resposta fundamentada
 nesse contexto~\cite{gao2024rag}. Esta abordagem permite responder com base num
 corpus específico---neste caso, uma página Web indexada---em vez de depender
-apenas do conhecimento paramétrico do modelo de linguagem, atacando diretamente
+apenas do conhecimento paramétrico do modelo de linguagem, reduzindo
 o problema das \emph{alucinações}~\cite{ji2023hallucination}.
 
 O sistema foi implementado num \emph{notebook} Jupyter, deliberadamente dividido
@@ -116,7 +114,7 @@ dimensão capazes de gerar texto fluente. Neste trabalho utiliza-se o
 \textbf{Llama~3.2}, pertencente à família de modelos abertos da Meta descrita
 em \emph{The Llama 3 Herd of Models}~\cite{llama3}. A escolha de um modelo aberto
 é decisiva: permite executá-lo \textbf{localmente}, sem custos por chamada e sem
-enviar dados para o exterior. Essa execução local é assegurada pelo
+enviar dados para partes externas ao sistema. Essa execução local é assegurada pelo
 \textbf{Ollama}~\cite{ollama}, um servidor que descarrega, gere e expõe modelos
 de linguagem na própria máquina através de um \emph{endpoint} HTTP em
 \texttt{localhost}.
@@ -124,12 +122,8 @@ de linguagem na própria máquina através de um \emph{endpoint} HTTP em
 \paragraph{Embeddings e recuperação semântica.}
 A recuperação em RAG assenta em \emph{embeddings}: vetores numéricos que
 posicionam textos com significado semelhante próximos uns dos outros. Em vez da
-pesquisa por palavras-chave, usa-se \emph{dense retrieval}, popularizado pelo
-\emph{Dense Passage Retrieval}~\cite{karpukhin2020dpr}, em que pergunta e
+pesquisa por palavras-chave, usa-se \emph{dense retrieval}, onde a pergunta e os
 documentos são projetados no mesmo espaço vetorial e comparados por similaridade.
-Para gerar estes vetores recorre-se à biblioteca \emph{Sentence-Transformers};
-em particular, adota-se um modelo \textbf{multilingue} obtido por destilação de
-conhecimento~\cite{reimers2020multilingual}, adequado a páginas em português.
 
 \paragraph{Bases de dados vetoriais.}
 Os \emph{embeddings} têm de ser armazenados e pesquisados de forma eficiente.
@@ -185,15 +179,6 @@ três aulas:
         aqui apresentada.
 \end{itemize}
 
-\paragraph{Adaptação relevante face aos slides.}
-As aulas T10 e T11 ilustram o \emph{pipeline} recorrendo, em alguns exemplos, a
-serviços com API (por exemplo \texttt{ChatOpenAI} e \texttt{OpenAIEmbeddings}).
-Como o enunciado proíbe chamadas a APIs em operação, substituíram-se esses
-componentes pelos equivalentes \textbf{locais} ensinados na própria T11:
-\texttt{ChatOpenAI}~$\rightarrow$~\textbf{ChatOllama} (Llama~3.2) e
-\texttt{OpenAIEmbeddings}~$\rightarrow$~\textbf{Sentence-Transformers}
-(\emph{HuggingFaceEmbeddings}). Mantém-se assim a arquitetura ensinada, mas
-cumpre-se a restrição de funcionamento \emph{offline}.
 
 % ---------------------------------------------------------------------------
 \section{Arquitetura}
@@ -232,7 +217,7 @@ Descreve-se de seguida cada etapa, com a respetiva justificação técnica.
 
 Todos os parâmetros do sistema ficam reunidos num único bloco, para que mudar de
 fonte de conhecimento se resuma a alterar o \texttt{URL} e reexecutar o
-\emph{notebook}. Os valores predefinidos seguem os usados na T11.
+\emph{notebook}.
 
 \begin{lstlisting}
 URL             = "https://pt.wikipedia.org/wiki/Processamento_de_linguagem_natural"
@@ -244,10 +229,6 @@ CHUNK_SIZE      = 1000
 CHUNK_OVERLAP   = 100
 TOP_K           = 4             # chunks recuperados por pergunta
 \end{lstlisting}
-
-A escolha de um modelo de \emph{embeddings} \textbf{multilingue} (em vez do
-\texttt{all-MiniLM-L6-v2} inglês dos slides) justifica-se por a fonte indexada
-estar em português~\cite{reimers2020multilingual}.
 
 \subsection*{Etapa 1 --- Verificação do ambiente}
 
@@ -273,14 +254,11 @@ principal = soup.find("main") or soup.find("article") or soup.body or soup
 texto = principal.get_text(separator="\n")
 \end{lstlisting}
 
-Esta é a \textbf{fronteira online~$\rightarrow$~offline}: a partir daqui, nada
-mais precisa de rede.
-
 \subsection*{Etapa 3 --- Chunking (segmentação)}
 
 O texto extraído é demasiado grande para ser usado de uma só vez, pelo que é
 dividido em segmentos menores com o \texttt{RecursiveCharacterTextSplitter}
-(\texttt{chunk\_size=1000}, \texttt{chunk\_overlap=100}), exatamente como na T11.
+(\texttt{chunk\_size=1000}, \texttt{chunk\_overlap=100}).
 A sobreposição (\emph{overlap}) preserva o contexto na fronteira entre
 \emph{chunks}, evitando que informação relevante fique artificialmente cortada.
 A cada \emph{chunk} é atribuído um identificador, para mais tarde citar a
@@ -291,9 +269,7 @@ proveniência da resposta.
 Cada \emph{chunk} é convertido num vetor que captura o seu significado, com um
 modelo \emph{Sentence-Transformers} executado \textbf{localmente}
 (\texttt{HuggingFaceEmbeddings}). Os vetores são normalizados, o que torna a
-similaridade do cosseno equivalente ao produto interno. Este componente
-substitui o \texttt{OpenAIEmbeddings} dos slides (que é uma API), preservando o
-conceito de \emph{dense retrieval}~\cite{karpukhin2020dpr}.
+similaridade do cosseno equivalente ao produto interno.
 
 \subsection*{Etapa 5 --- Indexação no ChromaDB}
 
@@ -320,10 +296,8 @@ compreender (e a defender) cada resposta.
 
 \subsection*{Etapa 7 --- Modelo de linguagem local (Ollama + Llama~3.2)}
 
-Carrega-se o Llama~3.2~\cite{llama3} através do \texttt{ChatOllama}, tal como na
-T11. Define-se \texttt{temperature=0} para tornar as respostas determinísticas e
-menos propensas a invenção. Este componente substitui o \texttt{ChatOpenAI} dos
-slides, eliminando a chamada à API.
+Carrega-se o Llama~3.2~\cite{llama3} através do \texttt{ChatOllama}. Define-se \texttt{temperature=0} para tornar as respostas determinísticas e
+menos propensas a invenção.
 
 \subsection*{Etapa 8 --- Cadeia RAG (LCEL)}
 
@@ -355,7 +329,7 @@ Esta etapa contrasta, para a mesma pergunta, duas respostas: a do \textbf{modelo
 sozinho} (que responde a partir da memória paramétrica e pode inventar) e a do
 \textbf{sistema com RAG} (que se ancora no conteúdo indexado e, na ausência de
 evidência, recusa responder). É a materialização prática do problema das
-alucinações discutido na T09.
+alucinações.
 
 \subsection*{Etapa 11 --- Modo Offline}
 
@@ -415,7 +389,7 @@ perguntas em linguagem natural sobre uma página Web indexada, sem qualquer
 chamada a APIs em operação e com funcionamento \emph{offline} após a ingestão. A
 combinação de \emph{web scraping}, \emph{Sentence-Transformers}, ChromaDB,
 LangChain e Llama~3.2 (via Ollama) reproduz fielmente a \emph{stack} ensinada nas
-aulas T09--T11, substituindo apenas os componentes baseados em API pelos seus
+aulas de CLN da Universidade da Beira Interior, substituindo apenas os componentes baseados em API pelos seus
 equivalentes locais.
 
 A decisão técnica mais relevante foi ancorar a geração no contexto recuperado e
@@ -429,7 +403,7 @@ Como trabalho futuro, identificam-se três direções alinhadas com as aulas:
 combinar recuperação densa com pesquisa esparsa (BM25) numa abordagem híbrida;
 acrescentar \emph{reranking} dos \emph{chunks} antes da geração; e indexar
 múltiplas fontes (várias páginas ou PDFs), eventualmente caracterizando o corpus
-com modelação de tópicos (LDA), conforme apresentado na T11.
+com modelação de tópicos (LDA).
 
 % ---------------------------------------------------------------------------
 \begin{thebibliography}{11}
